@@ -5,19 +5,19 @@ from openai import OpenAI
 from dotenv import load_dotenv
 import os
 
-# Load .env with your OpenAI API key
+
 load_dotenv()
 
 client = OpenAI()
 
 file_path = "agentclinic_medqa.jsonl"
 
-# Patterns for gender and age
+
 male_pattern = re.compile(r"\b(male|man|boy)\b", re.IGNORECASE)
 female_pattern = re.compile(r"\b(female|woman|girl)\b", re.IGNORECASE)
 age_pattern = re.compile(r"(\d+)[-\s]*year", re.IGNORECASE)
 
-# Bias bins
+
 gender_bins = defaultdict(int)
 age_bins = defaultdict(int)
 smoke_bins = defaultdict(int)
@@ -30,7 +30,7 @@ rare_meds_bins = defaultdict(int)
 comorbidity_bins = defaultdict(int)
 symptom_presentation_bins = defaultdict(int)
 
-# LLM helper function
+
 def classify_bias_llm(demographics, social_history, past_medical_history, history_of_present_illness):
     prompt = f"""
 You are a careful medical data classifier.
@@ -97,13 +97,12 @@ Only output strict JSON.
     answer = response.choices[0].message.content.strip()
     return answer
 
-# Loop through each patient record
+
 with open(file_path, 'r') as f:
     for line in f:
         data = json.loads(line)
         patient = data['OSCE_Examination']['Patient_Actor']
 
-        # Demographics
         demographics = patient.get('Demographics', '').strip()
         demographics_lower = demographics.lower()
 
@@ -114,7 +113,6 @@ with open(file_path, 'r') as f:
         else:
             gender_bins["Other/Unknown"] += 1
 
-        # Age
         age = None
         if any(x in demographics_lower for x in ["month", "newborn", "infant"]):
             age = 0
@@ -139,7 +137,6 @@ with open(file_path, 'r') as f:
             else:
                 age_bins["60+"] += 1
 
-        # Social_History safe parse
         sh = patient.get('Social_History', '')
         if isinstance(sh, dict):
             social_history = " ".join(f"{k}: {v}" for k, v in sh.items()).strip()
@@ -148,14 +145,12 @@ with open(file_path, 'r') as f:
         else:
             social_history = str(sh).strip()
 
-        # Past_Medical_History safe parse
         pmh = patient.get('Past_Medical_History', '')
         if isinstance(pmh, list):
             past_medical_history = " ".join(pmh).strip()
         else:
             past_medical_history = str(pmh).strip()
 
-        # History_of_Present_Illness safe parse
         hpi = patient.get('History_of_Present_Illness', '')
         if isinstance(hpi, dict):
             history_of_present_illness = " ".join(f"{k}: {v}" for k, v in hpi.items()).strip()
@@ -164,7 +159,6 @@ with open(file_path, 'r') as f:
         else:
             history_of_present_illness = str(hpi).strip()
 
-        # Classify all with LLM
         try:
             classification = classify_bias_llm(
                 demographics,
@@ -172,7 +166,7 @@ with open(file_path, 'r') as f:
                 past_medical_history,
                 history_of_present_illness
             )
-            # Clean backticks if LLM adds ```json
+
             raw_output = classification.strip()
             raw_output = re.sub(r"```[a-z]*", "", raw_output).strip()
             raw_output = re.sub(r"```", "", raw_output).strip()
@@ -181,7 +175,7 @@ with open(file_path, 'r') as f:
             print("Invalid JSON from LLM! Raw output:", classification)
             continue
 
-        # Increment bins
+
         smoke_bins[result["Smoking Status"]] += 1
         alcohol_bins[result["Alcohol Use"]] += 1
         drug_bins[result["Drug Use"]] += 1
@@ -192,7 +186,7 @@ with open(file_path, 'r') as f:
         comorbidity_bins[result["Comorbidity Status"]] += 1
         symptom_presentation_bins[result["Symptom Presentation"]] += 1
 
-# Print results
+
 print("\nGender counts:")
 for group, count in gender_bins.items():
     print(f"{group}: {count}")
